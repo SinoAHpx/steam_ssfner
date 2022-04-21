@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -139,7 +140,10 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(
+          widget.title,
+          // style: const TextStyle(color: Colors.black),
+        ),
         actions: [
           TextButton(
               child: const Icon(FontAwesome5.github),
@@ -148,6 +152,24 @@ class _MyHomePageState extends State<MyHomePage> {
                 launch("https://github.com/SinoAHpx/steam_ssfner");
               })
         ],
+        // flexibleSpace: Stack(
+        //   fit: StackFit.expand,
+        //   children: [
+        //     Image.asset(
+        //       'assets/last_sunset_2020.jpg',
+        //       fit: BoxFit.cover,
+        //     ),
+        //     ClipRRect(
+        //       child: BackdropFilter(
+        //         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        //         child: Container(
+        //           color: Colors.transparent,
+        //         ),
+        //       ),
+        //     )
+        //   ],
+        // ),
+        // backgroundColor: Colors.transparent,
       ),
       body: Container(
         margin: const EdgeInsets.all(10),
