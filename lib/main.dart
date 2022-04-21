@@ -1,5 +1,11 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttericon/font_awesome5_icons.dart';
+import 'package:steam_ssfner/services/dialog_utils.dart';
+import 'package:steam_ssfner/services/ssfn_service.dart';
+import 'package:steam_ssfner/services/win32_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 void main() {
@@ -34,6 +40,101 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  var ssfnController = TextEditingController();
+
+  var pathController = TextEditingController();
+
+  void _writeSsfn() async {
+    if (ssfnController.text.isEmpty || pathController.text.isEmpty) {
+      showCannotDialog(context: context, reason: 'Required information missed');
+      return;
+    }
+
+    if (!(await Directory(pathController.text).exists())) {
+      showCannotDialog(
+          context: context, reason: 'Invalid destination directory');
+      return;
+    }
+
+    try {
+      await SSFNService.write(
+          ssfn: ssfnController.text, steamPath: pathController.text);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Successfully wrote SSFN file!')));
+    } on Error catch (e) {
+      showFailedDialog(context: context, exception: e);
+    } on Exception catch (e) {
+      showFailedDialog(context: context, exception: e);
+    }
+  }
+
+  void _browserSsfn() async {
+    var path = await FilePicker.platform.getDirectoryPath();
+    if (path == null) {
+      showCannotDialog(context: context, reason: 'Invalid SSFN!');
+      return;
+    }
+
+    setState(() {
+      pathController.text = path!;
+    });
+  }
+
+  void _resetSteamPath() {
+    final path = Win32Service.getSteamPathByRegistry();
+    if (path != null) {
+      setState(() {
+        pathController.text = path;
+      });
+    }
+  }
+
+  void _clearSsfn() async {
+    final dialogResult = await showConfirmDialog();
+
+    if (dialogResult) {
+      if (pathController.text.isEmpty) {
+        showCannotDialog(context: context, reason: 'Invalid steam path!');
+        return;
+      }
+
+      final children =
+          Directory(pathController.text).listSync().whereType<File>();
+      for (var child in children) {
+        if (child.uri.pathSegments.last.startsWith('ssfn')) {
+          await child.delete();
+        }
+      }
+    }
+  }
+
+  Future<bool> showConfirmDialog() async {
+    var result = false;
+    await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('Confirm'),
+              content: const Text(
+                  'Are you sure to clear the SSFN file? This action cannot be undone.'),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('Cancel'),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                TextButton(
+                  child: const Text('Confirm'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    result = true;
+                  },
+                ),
+              ],
+            ));
+
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -44,7 +145,7 @@ class _MyHomePageState extends State<MyHomePage> {
               child: const Icon(FontAwesome5.github),
               style: TextButton.styleFrom(primary: Colors.white),
               onPressed: () {
-                launch("https://github.com/SinoAHpx");
+                launch("https://github.com/SinoAHpx/steam_ssfner");
               })
         ],
       ),
@@ -56,14 +157,30 @@ class _MyHomePageState extends State<MyHomePage> {
             ButtonSet(
               labelText: 'Steam SSFN',
               hintText: 'e.g. ssfn895090427336812694',
-              buttonText: 'Write',
-              buttonAction: () {},
+              textController: ssfnController,
+              interactivities: [
+                ElevatedButton(
+                    onPressed: _writeSsfn, child: const Text('Write')),
+              ],
             ),
             ButtonSet(
               labelText: 'Destination',
               hintText: '',
-              buttonText: 'Browser',
-              buttonAction: () {},
+              textController: pathController,
+              interactivities: [
+                MyButton(
+                    onPressed: _clearSsfn,
+                    tooltip: 'Delete all ssfn files in the steam directory',
+                    buttonText: 'Clear'),
+                MyButton(
+                    onPressed: _resetSteamPath,
+                    tooltip: 'Reset to default steam directory if it exists',
+                    buttonText: 'Reset'),
+                MyButton(
+                    onPressed: _browserSsfn,
+                    tooltip: '',
+                    buttonText: r'Browser'),
+              ],
             ),
           ],
         )),
@@ -72,12 +189,37 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class ButtonSet extends StatefulWidget {
+class MyButton extends StatelessWidget {
+  final void Function() onPressed;
+
+  final String tooltip;
+
+  final String buttonText;
+
+  const MyButton({
+    Key? key,
+    required this.onPressed,
+    required this.tooltip,
+    required this.buttonText,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+        message: tooltip,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          child: Text(buttonText),
+        ));
+  }
+}
+
+class ButtonSet extends StatelessWidget {
   const ButtonSet(
       {required this.hintText,
       required this.labelText,
-      required this.buttonText,
-      required this.buttonAction,
+      required this.textController,
+      required this.interactivities,
       Key? key})
       : super(key: key);
 
@@ -85,17 +227,10 @@ class ButtonSet extends StatefulWidget {
 
   final String labelText;
 
-  final String buttonText;
+  final TextEditingController textController;
 
-  final void Function() buttonAction;
+  final List<Widget> interactivities;
 
-  @override
-  State<StatefulWidget> createState() {
-    return ButtonSetState();
-  }
-}
-
-class ButtonSetState extends State<ButtonSet> {
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -103,21 +238,28 @@ class ButtonSetState extends State<ButtonSet> {
         Column(
           children: [
             TextField(
-              decoration: InputDecoration(
-                  hintText: widget.hintText, labelText: widget.labelText),
+              controller: textController,
+              decoration:
+                  InputDecoration(hintText: hintText, labelText: labelText),
             ),
             Container(
               margin: const EdgeInsets.symmetric(vertical: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  SizedBox(
-                    width: 100,
-                    height: 40,
-                    child: ElevatedButton(
-                      child: Text(widget.buttonText),
-                      onPressed: widget.buttonAction,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      for (var i in interactivities)
+                        SizedBox(
+                          width: 100,
+                          height: 40,
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            child: i,
+                          ),
+                        ),
+                    ],
                   )
                 ],
               ),
