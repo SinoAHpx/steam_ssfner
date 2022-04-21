@@ -10,7 +10,7 @@ To login your account without 2FA, 3 things have to be prepared:
 + Your Steam password
 + Your Steam SSFN(string)
 
-# Features
+## Features
 
 + Automatically download and write Steam SSFN files, only you need is a SSFN string.
 + Aesthetically designed interface.
